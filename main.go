@@ -126,29 +126,9 @@ func (b *Blaster) setBlue(val uint8) error {
 type setterFunc func(v uint8) error
 
 func (b *Blaster) setAll(c RGB) {
-	decrementer := func(cur, target uint8, f setterFunc) {
-		for i := cur; i > target; i-- {
-			f(i)
-		}
-	}
-
-	incrementer := func(cur, target uint8, f setterFunc) {
-		for i := cur; i < target; i++ {
-			f(i)
-		}
-	}
-
-	setter := func(cur, target uint8, f setterFunc) {
-		if cur < target {
-			incrementer(cur, target, f)
-		} else {
-			decrementer(cur, target, f)
-		}
-	}
-
-	setter(b.r, c.R, b.setRed)
-	setter(b.g, c.G, b.setGreen)
-	setter(b.b, c.B, b.setBlue)
+	b.setRed(c.R)
+	b.setGreen(c.G)
+	b.setBlue(c.B)
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request) {
