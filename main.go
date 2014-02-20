@@ -1,127 +1,154 @@
 package main
 
 import (
-	"bufio"
 	"errors"
+	"flag"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime/debug"
 	"strconv"
-)
-
-const (
-	REDCHAN   = "0"
-	BLUECHAN  = "1"
-	GREENCHAN = "2"
+	"syscall"
 )
 
 var (
 	templates *template.Template
-	CURRENT_R int = 0
-	CURRENT_G int = 0
-	CURRENT_B int = 0
+	blaster   *Blaster
+
+	flag_R        = flag.Uint("r", 17, "Red GPIO pin")
+	flag_G        = flag.Uint("g", 22, "Green GPIO pin")
+	flag_B        = flag.Uint("b", 27, "Blue GPIO pin")
+	flag_Cooldown = flag.Uint("cooldown", 10, "Milliseconds cooldown between requests")
 )
 
-func FloatToString(input_num float64) string {
-	return strconv.FormatFloat(input_num, 'f', 6, 64)
+type RGB struct {
+	R uint8
+	G uint8
+	B uint8
 }
 
-func parseTemplates() (err error) {
+func mustParseTemplates() {
+	var err error
 	templates, err = template.ParseGlob("templates/*.html")
 
-	return err
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-func setchan(channel string, val float64) error {
+func attemptPiBlasterStart() error {
+	cmd := exec.Command("pi-blaster")
+	return cmd.Run()
+}
 
-	chancmd := channel + "=" + FloatToString(val) + "\n"
-
+func mustOpenPiBlaster() *os.File {
 	file, err := os.OpenFile("/dev/pi-blaster", os.O_RDWR, os.ModeNamedPipe)
+
 	if err != nil {
-		panic(err)
+		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ENOENT {
+			err = attemptPiBlasterStart()
+		}
 	}
 
-	defer file.Close()
-
-	stream := bufio.NewWriter(file)
-
-	_, err = stream.WriteString(chancmd)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	stream.Flush()
+	return file
+}
 
+type Blaster struct {
+	pipe  *os.File
+	Input chan RGB
+	Color chan func(RGB)
+	shake chan struct{}
+
+	r, g, b uint8
+}
+
+func NewBlaster() *Blaster {
+	return &Blaster{
+		Input: make(chan RGB),
+		Color: make(chan func(RGB)),
+		shake: make(chan struct{}),
+	}
+}
+
+func (b *Blaster) Run() {
+	b.pipe = mustOpenPiBlaster()
+	defer b.pipe.Close()
+
+	for {
+		select {
+		case c := <-b.Input:
+			b.setAll(c)
+		case c := <-b.Color:
+			c(RGB{b.r, b.g, b.b})
+		}
+	}
+}
+
+func (b *Blaster) setPin(pin uint, val float64) error {
+	chanCmd := fmt.Sprintf("%d=%f\n", pin, val)
+
+	b.pipe.Write([]byte(chanCmd))
 	return nil
 }
 
-func setChannelInteger(val int, channel string) error {
-	if val > 255 {
+func (b *Blaster) setChannelInteger(pin uint, val uint8) error {
+	switch {
+	case val > 255:
 		return errors.New("can't go over 255. sorry mate.")
-	}
-
-	if val < 0 {
+	case val < 0:
 		return errors.New("can't go below 0. sorry mate.")
+	default:
+		fval := float64(val) / 255.0
+		return b.setPin(pin, fval)
+	}
+}
+
+func (b *Blaster) setRed(val uint8) error {
+	return b.setChannelInteger(*flag_R, val)
+}
+
+func (b *Blaster) setGreen(val uint8) error {
+	return b.setChannelInteger(*flag_G, val)
+}
+
+func (b *Blaster) setBlue(val uint8) error {
+	return b.setChannelInteger(*flag_B, val)
+}
+
+type setterFunc func(v uint8) error
+
+func (b *Blaster) setAll(c RGB) {
+	decrementer := func(cur, target uint8, f setterFunc) {
+		for i := cur; i > target; i-- {
+			f(i)
+		}
 	}
 
-	floatval := float64(val) / 255.0
-	setchan(channel, float64(floatval))
-	return nil
-}
-
-func setRed(val int) error {
-	return setChannelInteger(val, REDCHAN)
-}
-
-func setGreen(val int) error {
-	return setChannelInteger(val, GREENCHAN)
-}
-
-func setBlue(val int) error {
-	return setChannelInteger(val, BLUECHAN)
-}
-
-func setAll(r, g, b int) {
-
-	step := 1
-
-	for CURRENT_R != r ||
-		CURRENT_G != g ||
-		CURRENT_B != b {
-
-		if CURRENT_R < r {
-			CURRENT_R += step
-			setRed(CURRENT_R)
-		}
-
-		if CURRENT_R > r {
-			CURRENT_R -= step
-			setRed(CURRENT_R)
-		}
-
-		if CURRENT_G < g {
-			CURRENT_G += step
-			setGreen(CURRENT_G)
-		}
-
-		if CURRENT_G > g {
-			CURRENT_G -= step
-			setGreen(CURRENT_G)
-		}
-
-		if CURRENT_B < b {
-			CURRENT_B += step
-			setBlue(CURRENT_B)
-		}
-
-		if CURRENT_B > b {
-			CURRENT_B -= step
-			setBlue(CURRENT_B)
+	incrementer := func(cur, target uint8, f setterFunc) {
+		for i := cur; i < target; i++ {
+			f(i)
 		}
 	}
+
+	setter := func(cur, target uint8, f setterFunc) {
+		if cur < target {
+			incrementer(cur, target, f)
+		} else {
+			decrementer(cur, target, f)
+		}
+	}
+
+	setter(b.r, c.R, b.setRed)
+	setter(b.g, c.G, b.setGreen)
+	setter(b.b, c.B, b.setBlue)
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +160,7 @@ func errorHandler(w http.ResponseWriter, r *http.Request) {
 		if e, ok := err.(error); ok {
 			w.Write([]byte(e.Error()))
 			w.Write([]byte{'\n', '\n'})
+			w.Write(debug.Stack())
 		} else {
 			fmt.Fprintf(w, "%s\n\n", err)
 		}
@@ -143,64 +171,63 @@ func errorHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
+func parseUint8OrZero(s string) uint8 {
+	i, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		return 0
+	}
+	return uint8(i)
+}
+
+func actionHandler(w http.ResponseWriter, r *http.Request) {
 	defer errorHandler(w, r)
 
 	values, err := url.ParseQuery(r.URL.RawQuery)
+
 	if err != nil {
 		panic(err)
 	}
 
-	color := values.Get("targetcolor")
-	manual := values.Get("manual")
+	action := values.Get("action")
 
-	if manual == "set" {
-		man_r, _ := strconv.Atoi(values.Get("manual_r"))
-		man_g, _ := strconv.Atoi(values.Get("manual_g"))
-		man_b, _ := strconv.Atoi(values.Get("manual_b"))
-
-		fmt.Println("r: ", man_r, " - g: ", man_g, " - b:", man_b)
-
-		setAll(man_r, man_g, man_b)
-
-	} else {
-		switch color {
-		case "rot":
-			setAll(255, 0, 0)
-			break
-		case "gruen":
-			setAll(0, 255, 0)
-			break
-		case "blau":
-			setAll(0, 0, 255)
-			break
-		case "orange":
-			setAll(205, 55, 0)
-			break
-		case "favgruen":
-			setAll(255, 200, 0)
-			break
-		case "pink":
-			setAll(255, 0, 255)
-			break
-		case "lighter":
-			setAll(CURRENT_R+10, CURRENT_G+10, CURRENT_B+10)
-			break
-		case "darker":
-			setAll(CURRENT_R-10, CURRENT_G-10, CURRENT_B-10)
-			break
-		case "off":
-			setAll(0, 0, 0)
-			break
+	switch action {
+	case "lighter":
+		blaster.Color <- func(c RGB) {
+			blaster.Input <- RGB{c.R + 10, c.G + 10, c.B + 10}
 		}
+	case "darker":
+		blaster.Color <- func(c RGB) {
+			blaster.Input <- RGB{c.R - 10, c.G - 10, c.B - 10}
+		}
+	case "off":
+		blaster.Input <- RGB{0, 0, 0}
+	case "set":
+		r := parseUint8OrZero(values.Get("r"))
+		g := parseUint8OrZero(values.Get("g"))
+		b := parseUint8OrZero(values.Get("b"))
+
+		blaster.Input <- RGB{r, g, b}
 	}
+}
+
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	defer errorHandler(w, r)
 	templates.ExecuteTemplate(w, "index.html", nil)
 }
 
 func main() {
-	setAll(CURRENT_R, CURRENT_G, CURRENT_B)
-	parseTemplates()
+	flag.Parse()
+
+	blaster = NewBlaster()
+	go blaster.Run()
+
+	blaster.Input <- RGB{}
+
+	mustParseTemplates()
 
 	http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/do", actionHandler)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("templates"))))
+
 	log.Fatal(http.ListenAndServe(":1337", nil))
 }
