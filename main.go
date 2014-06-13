@@ -31,6 +31,10 @@ type RGB struct {
 	B uint8
 }
 
+func (c RGB) String() string {
+	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+}
+
 func mustParseTemplates() {
 	var err error
 	templates, err = template.ParseGlob("templates/*.html")
@@ -190,6 +194,19 @@ func actionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func currentColorHandler(w http.ResponseWriter, r *http.Request) {
+	defer errorHandler(w, r)
+	w.Header().Set("Content-Type", "text/plain")
+
+	c := make(chan RGB)
+
+	blaster.Color <- func(color RGB) {
+		c <- color
+	}
+
+	w.Write([]byte((<-c).String()))
+}
+
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	defer errorHandler(w, r)
 	templates.ExecuteTemplate(w, "index.html", nil)
@@ -207,6 +224,7 @@ func main() {
 
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/do", actionHandler)
+	http.HandleFunc("/color", currentColorHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("templates"))))
 
 	log.Fatal(http.ListenAndServe(":1337", nil))
