@@ -25,14 +25,17 @@
 
 			<script type="text/javascript">
 				$(document).ready(function() {
-					$('#picker').colpick({
-						flat:true,
-						layout:'hex',
-						submit:0,
-						onChange: function(hsb, hex, rgb, el, bySetColor) {
-							$.ajax("/do?action=set&r="+rgb.r+"&g="+rgb.g+"&b="+rgb.b);
-						}
-					});
+					$.ajax("/color").complete(function(xhr, status) {
+						$('#picker').colpick({
+							flat:true,
+							layout:'hex',
+							color: xhr.responseText,
+							submit:0,
+							onChange: function(hsb, hex, rgb, el, bySetColor) {
+								$.ajax("/do?action=set&r="+rgb.r+"&g="+rgb.g+"&b="+rgb.b);
+							}
+						});
+					})
 				});
 			</script>
 		</div>
