@@ -68,7 +68,7 @@ func mustOpenPiBlaster() *os.File {
 type Blaster struct {
 	pipe  *os.File
 	Input chan RGB
-	Color chan func(RGB)
+	Color chan chan RGB
 	shake chan struct{}
 
 	r, g, b uint8
@@ -77,7 +77,7 @@ type Blaster struct {
 func NewBlaster() *Blaster {
 	return &Blaster{
 		Input: make(chan RGB),
-		Color: make(chan func(RGB)),
+		Color: make(chan chan RGB),
 		shake: make(chan struct{}),
 	}
 }
@@ -91,7 +91,7 @@ func (b *Blaster) Run() {
 		case c := <-b.Input:
 			b.setAll(c)
 		case c := <-b.Color:
-			c(RGB{b.r, b.g, b.b})
+			go func(c chan RGB) { c <- RGB{b.r, b.g, b.b} }(c)
 		}
 	}
 }
@@ -116,14 +116,17 @@ func (b *Blaster) setChannelInteger(pin uint, val uint8) error {
 }
 
 func (b *Blaster) setRed(val uint8) error {
+	b.r = val
 	return b.setChannelInteger(*flag_R, val)
 }
 
 func (b *Blaster) setGreen(val uint8) error {
+	b.g = val
 	return b.setChannelInteger(*flag_G, val)
 }
 
 func (b *Blaster) setBlue(val uint8) error {
+	b.b = val
 	return b.setChannelInteger(*flag_B, val)
 }
 
@@ -163,6 +166,13 @@ func parseUint8OrZero(s string) uint8 {
 	return uint8(i)
 }
 
+func withRequestedColor(f func(color RGB)) {
+	c := make(chan RGB)
+	defer close(c)
+	blaster.Color <- c
+	f(<-c)
+}
+
 func actionHandler(w http.ResponseWriter, r *http.Request) {
 	defer errorHandler(w, r)
 
@@ -176,13 +186,13 @@ func actionHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "lighter":
-		blaster.Color <- func(c RGB) {
+		withRequestedColor(func(c RGB) {
 			blaster.Input <- RGB{c.R + 10, c.G + 10, c.B + 10}
-		}
+		})
 	case "darker":
-		blaster.Color <- func(c RGB) {
+		withRequestedColor(func(c RGB) {
 			blaster.Input <- RGB{c.R - 10, c.G - 10, c.B - 10}
-		}
+		})
 	case "off":
 		blaster.Input <- RGB{0, 0, 0}
 	case "set":
@@ -198,13 +208,9 @@ func currentColorHandler(w http.ResponseWriter, r *http.Request) {
 	defer errorHandler(w, r)
 	w.Header().Set("Content-Type", "text/plain")
 
-	c := make(chan RGB)
-
-	blaster.Color <- func(color RGB) {
-		c <- color
-	}
-
-	w.Write([]byte((<-c).String()))
+	withRequestedColor(func(c RGB) {
+		w.Write([]byte(c.String()))
+	})
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
