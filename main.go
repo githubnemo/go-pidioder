@@ -115,19 +115,25 @@ func (b *Blaster) setChannelInteger(pin uint, val uint8) error {
 	}
 }
 
-func (b *Blaster) setRed(val uint8) error {
-	b.r = val
-	return b.setChannelInteger(*flag_R, val)
+func (b *Blaster) setRed(val uint8) (err error) {
+	if err = b.setChannelInteger(*flag_R, val); err != nil {
+		b.r = val
+	}
+	return
 }
 
-func (b *Blaster) setGreen(val uint8) error {
-	b.g = val
-	return b.setChannelInteger(*flag_G, val)
+func (b *Blaster) setGreen(val uint8) (err error) {
+	if err = b.setChannelInteger(*flag_G, val); err != nil {
+		b.g = val
+	}
+	return
 }
 
-func (b *Blaster) setBlue(val uint8) error {
-	b.b = val
-	return b.setChannelInteger(*flag_B, val)
+func (b *Blaster) setBlue(val uint8) (err error) {
+	if err = b.setChannelInteger(*flag_B, val); err != nil {
+		b.b = val
+	}
+	return
 }
 
 type setterFunc func(v uint8) error
