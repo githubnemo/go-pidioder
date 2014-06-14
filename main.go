@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 var (
@@ -91,7 +92,14 @@ func (b *Blaster) Run() {
 		case c := <-b.Input:
 			b.setAll(c)
 		case c := <-b.Color:
-			go func(c chan RGB) { c <- RGB{b.r, b.g, b.b} }(c)
+			go func(c chan RGB) {
+				select {
+				case c <- RGB{b.r, b.g, b.b}:
+					// delivered, everything's OK
+				case <-time.After(5 * time.Second):
+					log.Fatal("Requested color chan blocked too long.")
+				}
+			}(c)
 		}
 	}
 }
