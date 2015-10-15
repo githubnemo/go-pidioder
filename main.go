@@ -144,9 +144,20 @@ func (b *Blaster) setBlue(val uint8) (err error) {
 	return
 }
 
-type setterFunc func(v uint8) error
+func (_ *Blaster) correctColor(c RGB) RGB {
+	gcorrection := float64(0x77) / 0xFF
+	bcorrection := float64(0x33) / 0xFF
+
+	c.G = uint8(float64(c.G) * gcorrection)
+	c.B = uint8(float64(c.B) * bcorrection)
+
+	log.Println(c, gcorrection, bcorrection)
+
+	return c
+}
 
 func (b *Blaster) setAll(c RGB) {
+	c = b.correctColor(c)
 	b.setRed(c.R)
 	b.setGreen(c.G)
 	b.setBlue(c.B)
