@@ -151,8 +151,6 @@ func (_ *Blaster) correctColor(c RGB) RGB {
 	c.G = uint8(float64(c.G) * gcorrection)
 	c.B = uint8(float64(c.B) * bcorrection)
 
-	log.Println(c, gcorrection, bcorrection)
-
 	return c
 }
 
