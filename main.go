@@ -70,7 +70,6 @@ type Blaster struct {
 	pipe  *os.File
 	Input chan RGB
 	Color chan chan RGB
-	shake chan struct{}
 
 	r, g, b uint8
 }
@@ -79,7 +78,6 @@ func NewBlaster() *Blaster {
 	return &Blaster{
 		Input: make(chan RGB),
 		Color: make(chan chan RGB),
-		shake: make(chan struct{}),
 	}
 }
 
