@@ -223,6 +223,11 @@ func actionHandler(w http.ResponseWriter, r *http.Request) {
 
 		blaster.Input <- RGB{r, g, b}
 	}
+
+	withRequestedColor(func(c RGB) {
+		log.Println(c.R, c.G, c.B)
+		w.Write([]byte(c.String()))
+	})
 }
 
 func currentColorHandler(w http.ResponseWriter, r *http.Request) {
