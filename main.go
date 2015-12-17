@@ -124,21 +124,21 @@ func (b *Blaster) setChannelInteger(pin uint, val uint8) error {
 }
 
 func (b *Blaster) setRed(val uint8) (err error) {
-	if err = b.setChannelInteger(*flag_R, val); err != nil {
+	if err = b.setChannelInteger(*flag_R, val); err == nil {
 		b.r = val
 	}
 	return
 }
 
 func (b *Blaster) setGreen(val uint8) (err error) {
-	if err = b.setChannelInteger(*flag_G, val); err != nil {
+	if err = b.setChannelInteger(*flag_G, val); err == nil {
 		b.g = val
 	}
 	return
 }
 
 func (b *Blaster) setBlue(val uint8) (err error) {
-	if err = b.setChannelInteger(*flag_B, val); err != nil {
+	if err = b.setChannelInteger(*flag_B, val); err == nil {
 		b.b = val
 	}
 	return
