@@ -9,6 +9,7 @@ Also in this github is his original code which I translated some of it to englis
 
 To install Go which is needed to run this project, enter the following lines in the terminal:
     wget https://storage.googleapis.com/golang/go1.8.3.linux-armv6l.tar.gz
+    
     sudo tar -C /usr/local -xzf go1.8.3.linux-armv6l.tar.gz
 
 Then add this line to ~/.profile by doing this:
