@@ -165,31 +165,31 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 	} else {
 		switch color {
-		case "rot":
+		case "Red":
 			setAll(255, 0, 0)
 			break
-		case "gruen":
+		case "Green":
 			setAll(0, 255, 0)
 			break
-		case "blau":
+		case "Blue":
 			setAll(0, 0, 255)
 			break
-		case "orange":
+		case "Specific Preset 1":
 			setAll(205, 55, 0)
 			break
-		case "favgruen":
+		case "Specific Preset 2":
 			setAll(255, 200, 0)
 			break
-		case "pink":
+		case "Specific Preset 3":
 			setAll(255, 0, 255)
 			break
-		case "lighter":
+		case "Brighten":
 			setAll(CURRENT_R+10, CURRENT_G+10, CURRENT_B+10)
 			break
-		case "darker":
+		case "Dim":
 			setAll(CURRENT_R-10, CURRENT_G-10, CURRENT_B-10)
 			break
-		case "off":
+		case "Turn off":
 			setAll(0, 0, 0)
 			break
 		}
